@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>積立計算（満期一括課税）</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f5f5f5; color: #222; font-size: 16px; -webkit-text-size-adjust: 100%; }
+  .container { max-width: 900px; margin: 0 auto; padding: 1.2rem 1rem 3rem; }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 1.2rem; }
+  .card { background: #fff; border-radius: 10px; border: 1px solid #e0e0e0; padding: 1.2rem; margin-bottom: 1.2rem; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 13px; color: #555; }
+  .field-row { display: flex; align-items: center; gap: 6px; }
+  .field input, .field select {
+    flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid #ccc;
+    border-radius: 8px; font-size: 16px; background: #fafafa; color: #222;
+    outline: none; transition: border-color 0.2s;
+    -webkit-appearance: none; appearance: none;
+  }
+  .field select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px;
+  }
+  .field input:focus, .field select:focus { border-color: #4a90e2; background: #fff; }
+  .unit { font-size: 14px; color: #888; white-space: nowrap; }
+  .calc-btn {
+    width: 100%; padding: 15px; background: #2563eb; color: #fff;
+    border: none; border-radius: 10px; font-size: 17px; font-weight: 500;
+    cursor: pointer; margin-top: 1rem;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .calc-btn:active { background: #1d4ed8; }
+  .result-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.2rem; }
+  .rcard { background: #f8f9fa; border-radius: 8px; padding: 12px 8px; text-align: center; border: 1px solid #e8e8e8; }
+  .rcard-label { font-size: 11px; color: #777; margin-bottom: 5px; line-height: 1.3; }
+  .rcard-value { font-size: 16px; font-weight: 500; word-break: break-all; }
+  .rcard-value.blue { color: #2563eb; }
+  .rcard-value.green { color: #16a34a; }
+  .chart-wrap { position: relative; height: 240px; }
+  .table-wrap { overflow-x: visible; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th { background: #f1f5f9; padding: 7px 4px; text-align: right; font-weight: 500; border-bottom: 2px solid #e0e0e0; color: #444; line-height: 1.3; font-size: 11px; }
+  th:first-child { text-align: center; width: 2em; }
+  th .unit { display: block; font-size: 10px; font-weight: 400; color: #888; }
+  td { padding: 7px 4px; text-align: right; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+  td:first-child { text-align: center; color: #888; }
+  tr:last-child td { font-weight: 500; background: #f8fafc; }
+  .note { font-size: 11px; color: #aaa; margin-top: 1rem; line-height: 1.5; }
+  #results { display: none; }
+  @media (max-width: 480px) {
+    .container { padding: 1rem 0.75rem 3rem; }
+    .form-grid { grid-template-columns: 1fr; }
+    h1 { font-size: 18px; }
+    .chart-wrap { height: 200px; }
+    .rcard-value { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>積立計算（満期一括課税）</h1>
+  <p class="subtitle">定額積立の元利合計と利息を計算します。税金は満期時に一括課税されます。</p>
+
+  <div class="card">
+    <div class="form-grid">
+      <div class="field">
+        <label>年利率</label>
+        <div class="field-row">
+          <input type="number" id="rate" value="3" step="0.01" min="0" inputmode="decimal">
+          <span class="unit">%</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>利息端数処理</label>
+        <select id="rounding">
+          <option value="floor" selected>切捨て</option>
+          <option value="round">四捨五入</option>
+          <option value="ceil">切上げ</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>積立年数</label>
+        <div class="field-row">
+          <input type="number" id="years" value="40" min="1" max="60" inputmode="numeric">
+          <span class="unit">年</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>毎月積立額</label>
+        <div class="field-row">
+          <input type="number" id="monthly" value="3" step="0.1" min="0" inputmode="decimal">
+          <span class="unit">万円</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>積立前の元金</label>
+        <div class="field-row">
+          <input type="number" id="principal" value="0" step="0.1" min="0" inputmode="decimal">
+          <span class="unit">万円</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>複利方式</label>
+        <select id="compounding">
+          <option value="monthly">月複利</option>
+          <option value="semi">半年複利</option>
+          <option value="annual" selected>年複利</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>課税方式</label>
+        <select id="taxtype">
+          <option value="nontax">非課税</option>
+          <option value="lump" selected>満期時一括課税</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>税率</label>
+        <div class="field-row">
+          <input type="number" id="taxrate" value="20.315" step="0.001" min="0" inputmode="decimal">
+          <span class="unit">%</span>
+        </div>
+      </div>
+    </div>
+    <button class="calc-btn" onclick="calculate()">計算する</button>
+  </div>
+
+  <div id="results">
+    <div class="result-cards">
+      <div class="rcard">
+        <div class="rcard-label">元金合計</div>
+        <div class="rcard-value blue" id="res-principal">-</div>
+      </div>
+      <div class="rcard">
+        <div class="rcard-label">税引前利息合計</div>
+        <div class="rcard-value" id="res-interest">-</div>
+      </div>
+      <div class="rcard">
+        <div class="rcard-label">税引後元利合計</div>
+        <div class="rcard-value green" id="res-total">-</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chart-wrap">
+        <canvas id="myChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>年</th>
+              <th>元金合計<span class="unit">（万円）</span></th>
+              <th>利息<span class="unit">（万円）</span></th>
+              <th>税引前<br>元利合計<span class="unit">（万円）</span></th>
+              <th>税引後<br>元利合計<span class="unit">（万円）</span></th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+      <p class="note">※ 計算結果は参考値です。実際の金融機関の計算方法と異なる場合があります。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+let myChart = null;
+
+function applyRounding(val, method) {
+  if (method === 'floor') return Math.floor(val);
+  if (method === 'ceil') return Math.ceil(val);
+  return Math.round(val);
+}
+
+function calculate() {
+  const rate = parseFloat(document.getElementById('rate').value) / 100;
+  const years = parseInt(document.getElementById('years').value);
+  const monthly = parseFloat(document.getElementById('monthly').value);
+  const principal = parseFloat(document.getElementById('principal').value);
+  const compounding = document.getElementById('compounding').value;
+  const taxtype = document.getElementById('taxtype').value;
+  const taxrate = parseFloat(document.getElementById('taxrate').value) / 100;
+  const rounding = document.getElementById('rounding').value;
+
+  const yearlyData = [];
+
+  for (let y = 1; y <= years; y++) {
+    const months = y * 12;
+    let balance = principal * 10000;
+
+    if (compounding === 'monthly') {
+      const r = rate / 12;
+      balance = balance * Math.pow(1 + r, months);
+      for (let m = 1; m <= months; m++) {
+        balance += (monthly * 10000) * Math.pow(1 + r, months - m);
+      }
+    } else if (compounding === 'semi') {
+      const r = rate / 2;
+      const periods = y * 2;
+      balance = (principal * 10000) * Math.pow(1 + r, periods);
+      for (let p = 1; p <= periods; p++) {
+        balance += (monthly * 10000 * 6) * Math.pow(1 + r, periods - p);
+      }
+    } else {
+      balance = (principal * 10000) * Math.pow(1 + rate, y);
+      for (let m = 1; m <= months; m++) {
+        balance += (monthly * 10000) * Math.pow(1 + rate, (months - m + 1) / 12);
+      }
+    }
+
+    const totalPrincipal = (principal + monthly * 12 * y) * 10000;
+    const rawInterest = balance - totalPrincipal;
+    const interest = applyRounding(rawInterest, rounding);
+    const grossTotal = totalPrincipal + interest;
+    let netTotal;
+    if (taxtype === 'nontax') {
+      netTotal = grossTotal;
+    } else {
+      const tax = applyRounding(interest * taxrate, rounding);
+      netTotal = grossTotal - tax;
+    }
+
+    yearlyData.push({
+      year: y,
+      principal: totalPrincipal / 10000,
+      gross: grossTotal / 10000,
+      interest: interest / 10000,
+      net: netTotal / 10000
+    });
+  }
+
+  document.getElementById('res-principal').textContent = fmt(yearlyData[years-1].principal) + '万円';
+  document.getElementById('res-interest').textContent = fmt(yearlyData[years-1].interest) + '万円';
+  document.getElementById('res-total').textContent = fmt(yearlyData[years-1].net) + '万円';
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+  yearlyData.forEach(d => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${d.year}</td><td>${fmt(d.principal)}</td><td>${fmt(d.interest)}</td><td>${fmt(d.gross)}</td><td>${fmt(d.net)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const labels = yearlyData.map(d => d.year + '年');
+  const principalData = yearlyData.map(d => +d.principal.toFixed(2));
+  const netData = yearlyData.map(d => +d.net.toFixed(2));
+
+  if (myChart) myChart.destroy();
+  const ctx = document.getElementById('myChart').getContext('2d');
+
+  myChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '元金合計', data: principalData, backgroundColor: '#93c5fd' },
+        { label: '税引後元利合計', data: netData, backgroundColor: '#6ee7b7' },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#444', font: { size: 12 } } } },
+      scales: {
+        x: { ticks: { color: '#666', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        y: { ticks: { color: '#666', font: { size: 10 }, callback: v => v + '万' }, grid: { color: 'rgba(0,0,0,0.06)' } }
+      }
+    }
+  });
+
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function fmt(n) {
+  return n.toLocaleString('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+calculate();
+</script>
+</body>
+</html>
